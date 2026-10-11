@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#04121e" id="metaTheme"/>
+<title>SKYRADAR — Radar Cuaca Perjalanan Real-Time</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+/* ============ TEMA ============ */
+:root{
+  --bg:#04121e; --panel:#07202f; --panel2:#0a2c40; --line:#10405c;
+  --accent:#19e6ff; --accent-rgb:25,230,255; --accent-contrast:#032232;
+  --green:#27ff81; --yellow:#ffd166; --red:#ff5c5c;
+  --text:#d7f4ff; --dim:#6fa3b8;
+  --gradA:#072131; --gradB:#04121e;
+  --cardA:rgba(10,44,64,.75); --cardB:rgba(7,32,47,.9);
+  --glass:rgba(4,18,30,.86); --input:#041826; --mapbg:#0b2436;
+  --tile:rgba(4,18,30,.6); --sblin:rgba(16,64,92,.5);
+}
+[data-theme="light"]{
+  --bg:#e8f3fa; --panel:#ffffff; --panel2:#eef7fd; --line:#b9d7e8;
+  --accent:#0077b6; --accent-rgb:0,119,182; --accent-contrast:#ffffff;
+  --green:#0c8f4f; --yellow:#a9750e; --red:#d23b3b;
+  --text:#0f3c55; --dim:#4d7b93;
+  --gradA:#f6fbff; --gradB:#dceefb;
+  --cardA:rgba(255,255,255,.92); --cardB:rgba(238,247,253,.95);
+  --glass:rgba(255,255,255,.9); --input:#ffffff; --mapbg:#cfe0ec;
+  --tile:rgba(215,234,244,.75); --sblin:rgba(185,215,232,.6);
+}
+[data-theme="night"]{
+  --bg:#0c0505; --panel:#170b0a; --panel2:#21100d; --line:#3d1d19;
+  --accent:#ffb454; --accent-rgb:255,180,84; --accent-contrast:#2b1606;
+  --green:#7fd67f; --yellow:#ffcf6e; --red:#ff7a6e;
+  --text:#ffe8d2; --dim:#b3876f;
+  --gradA:#1a0c09; --gradB:#0c0505;
+  --cardA:rgba(33,16,13,.8); --cardB:rgba(23,11,10,.92);
+  --glass:rgba(12,5,5,.86); --input:#1d0e0b; --mapbg:#140807;
+  --tile:rgba(20,9,7,.6); --sblin:rgba(61,29,25,.6);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Rajdhani',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.mono{font-family:'Share Tech Mono',monospace}
+.hidden{display:none!important}
+
+#app{height:100vh;height:100dvh;display:flex;flex-direction:column}
+
+/* ===== HEADER ===== */
+header{display:flex;align-items:center;gap:12px;padding:0 14px;height:56px;
+  background:linear-gradient(180deg,var(--gradA),var(--gradB));border-bottom:1px solid var(--line);
+  position:relative;z-index:1300;flex-shrink:0}
+#btnMenu{display:none;width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+  background:transparent;color:var(--accent);font-size:16px;cursor:pointer}
+.radar-logo{width:30px;height:30px;border-radius:50%;border:1px solid var(--accent);position:relative;
+  overflow:hidden;flex-shrink:0;background:radial-gradient(circle,rgba(var(--accent-rgb),.18),transparent 70%)}
+.radar-logo i{position:absolute;inset:0;background:conic-gradient(from 0deg,rgba(39,255,129,.85),transparent 100deg);animation:sweep 2.6s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.brand h1{font:800 17px 'Orbitron';letter-spacing:2px}
+.brand h1 span{color:var(--accent);margin-left:8px;font:600 11px 'Orbitron';letter-spacing:4px}
+.sub{font-size:11px;color:var(--dim)}
+.hstats{margin-left:auto;display:flex;align-items:center;gap:12px}
+.live{display:flex;align-items:center;gap:6px;font:700 11px 'Rajdhani';color:var(--green);letter-spacing:2px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--green);animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.2}}
+.hstat{font:12px 'Share Tech Mono';color:var(--dim)}
+#clock{color:var(--accent)}
+#btnTheme{border:1px solid var(--line);background:transparent;color:var(--text);
+  padding:6px 11px;border-radius:9px;font:700 12px 'Rajdhani';letter-spacing:1px;cursor:pointer;white-space:nowrap}
+#btnTheme:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ===== LAYOUT ===== */
+#main{flex:1;display:flex;min-height:0;position:relative}
+#sidebar{width:372px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--line);
+  background:linear-gradient(180deg,var(--gradA),var(--gradB))}
+#sidebar::-webkit-scrollbar{width:6px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+#mapWrap{flex:1;position:relative;background:var(--mapbg)}
+#map{position:absolute;inset:0;background:var(--mapbg)}
+
+/* ===== SIDEBAR ===== */
+.sb-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px}
+.sb-head h2{font:800 13px 'Orbitron';letter-spacing:3px}
+.iconbtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:transparent;
+  color:var(--dim);cursor:pointer;display:none;place-items:center}
+.sec{padding:14px 16px;border-bottom:1px solid var(--sblin)}
+.sec h3{font:700 11px 'Orbitron';letter-spacing:2px;color:var(--accent);margin-bottom:10px}
+
+input.txt,.txt{width:100%;background:var(--input);border:1px solid var(--line);color:var(--text);
+  padding:9px 11px;border-radius:9px;font:600 14px 'Rajdhani';outline:none}
+input.txt:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.15)}
+.lbl{font:700 9px 'Orbitron';letter-spacing:2px;color:var(--dim);display:block;margin:10px 0 4px}
+.searchwrap{position:relative;margin-bottom:8px}
+.srlist{position:absolute;top:100%;left:0;right:0;background:var(--panel);border:1px solid var(--accent);
+  border-top:0;border-radius:0 0 10px 10px;z-index:60;display:none;max-height:230px;overflow:auto;
+  box-shadow:0 10px 26px rgba(0,0,0,.35)}
+.srlist.show{display:block}
+.sr-item{padding:8px 11px;cursor:pointer;border-bottom:1px solid var(--sblin)}
+.sr-item b{display:block;font-size:14px}
+.sr-item span{font-size:11px;color:var(--dim)}
+.sr-item:hover{background:rgba(var(--accent-rgb),.12)}
+.sr-item.dim{color:var(--dim);cursor:default}
+
+.btn{background:rgba(var(--accent-rgb),.08);border:1px solid var(--accent);color:var(--accent);
+  padding:9px 12px;border-radius:9px;font:700 13px 'Rajdhani';letter-spacing:.6px;cursor:pointer;transition:.15s}
+.btn:hover{background:rgba(var(--accent-rgb),.2);box-shadow:0 0 14px rgba(var(--accent-rgb),.25)}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn.ghost{border-color:var(--line);color:var(--dim)}
+.btn.full{width:100%}
+.rowbtns{display:flex;gap:8px;margin-bottom:8px}
+.rowbtns .btn{flex:1}
+
+.hint{font-size:13px;color:var(--dim);line-height:1.5;background:rgba(var(--accent-rgb),.05);
+  border:1px dashed var(--line);padding:10px;border-radius:10px;margin-top:10px}
+
+.card{background:linear-gradient(180deg,var(--cardA),var(--cardB));
+  border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px}
+.wx-head{display:flex;align-items:center;gap:10px}
+#wxIcon{font-size:30px;line-height:1}
+#wxName{font-weight:700;font-size:15px;line-height:1.15;word-break:break-word}
+#wxCoords{font:11px 'Share Tech Mono';color:var(--dim)}
+.badge{margin-left:auto;padding:3px 9px;border-radius:999px;font:700 11px 'Rajdhani';
+  letter-spacing:1px;border:1px solid;flex-shrink:0}
+.badge.green{color:var(--green);border-color:var(--green);background:rgba(39,255,129,.1)}
+.badge.yellow{color:var(--yellow);border-color:var(--yellow);background:rgba(255,209,102,.1)}
+.badge.red{color:var(--red);border-color:var(--red);background:rgba(255,92,92,.12);animation:blink 1.2s infinite}
+.wx-main{display:flex;align-items:baseline;gap:10px;margin:8px 0}
+#wxTemp{font:700 42px 'Share Tech Mono';color:var(--accent)}
+#wxDesc{font-size:16px;font-weight:600}
+.wx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.wx-grid>div{background:var(--tile);border:1px solid var(--sblin);border-radius:8px;padding:6px 8px}
+.wx-grid label{display:block;font-size:10px;color:var(--dim);letter-spacing:.5px}
+.wx-grid b{font:600 13px 'Share Tech Mono'}
+.wx-hourly{display:flex;gap:5px;overflow-x:auto;margin-top:10px;padding-bottom:4px}
+.hr{min-width:52px;background:var(--tile);border:1px solid var(--sblin);border-radius:8px;
+  padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px}
+.hr .t{color:var(--dim);font:10px 'Share Tech Mono'}
+.hr .ic{font-size:16px}
+.hr .v{font-weight:700}
+.pbar{width:26px;height:20px;background:var(--tile);border-radius:3px;display:flex;align-items:flex-end;overflow:hidden}
+.pbar i{display:block;width:100%;background:linear-gradient(180deg,var(--accent),rgba(var(--accent-rgb),.4))}
+.hr .p{font:10px 'Share Tech Mono';color:var(--dim)}
+
+.verdict{border-radius:10px;padding:10px 12px;font-weight:600;line-height:1.4;margin:10px 0;border:1px solid;font-size:14px}
+.v-green{color:var(--green);border-color:var(--green);background:rgba(39,255,129,.07)}
+.v-yellow{color:var(--yellow);border-color:var(--yellow);background:rgba(255,209,102,.07)}
+.v-red{color:var(--red);border-color:var(--red);background:rgba(255,92,92,.08)}
+#routeMeta{font-size:14px;line-height:1.5}
+.dimtxt{color:var(--dim);font-size:11px}
+#routeList .rw{display:flex;gap:8px;align-items:center;padding:6px 4px;
+  border-bottom:1px dashed var(--sblin);font-size:13px}
+.rw .km{color:var(--dim);min-width:62px;font:11px 'Share Tech Mono'}
+.rw .nm{flex:1;font-weight:600}
+.rw .st{font-weight:600}
+.st.green{color:var(--green)}.st.yellow{color:var(--yellow)}.st.red{color:var(--red)}.st{color:var(--dim)}
+
+details.howto{margin-top:10px;background:rgba(var(--accent-rgb),.05);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;font-size:13px}
+details.howto summary{cursor:pointer;font-weight:700;letter-spacing:.5px}
+details.howto ul{margin:8px 0 2px 18px;line-height:1.5}
+details.howto li{margin:4px 0}
+.src{font-size:11px;color:var(--dim);padding:12px 16px 22px;line-height:1.5}
+
+/* ===== MAP OVERLAYS ===== */
+#radarBar{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;
+  width:min(720px,calc(100% - 20px));background:var(--glass);backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:14px;padding:8px 12px 10px;z-index:1100;
+  box-shadow:0 8px 30px rgba(0,0,0,.45)}
+.rb-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--accent);
+  background:rgba(var(--accent-rgb),.08);color:var(--accent);font-size:14px;cursor:pointer;flex-shrink:0}
+.rbtn.on{background:var(--accent);color:var(--accent-contrast)}
+.rb-time{display:flex;align-items:center;gap:6px;font-size:16px}
+#predLabel{font:700 9px 'Rajdhani';letter-spacing:1px;color:var(--yellow);
+  border:1px solid var(--yellow);padding:1px 6px;border-radius:999px;display:none}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+.seg button{background:transparent;color:var(--dim);border:0;padding:6px 10px;
+  font:700 11px 'Rajdhani';letter-spacing:1px;cursor:pointer}
+.seg button.active{background:rgba(var(--accent-rgb),.15);color:var(--accent)}
+.opwrap{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:14px}
+#opSlider{width:90px}
+#tlSlider{width:100%;margin-top:9px}
+input[type=range]{accent-color:var(--accent)}
+
+#legend{position:absolute;top:12px;right:12px;z-index:1100;background:var(--glass);
+  border:1px solid var(--line);border-radius:10px;padding:8px 10px;backdrop-filter:blur(8px)}
+.lg-title{font:700 9px 'Rajdhani';letter-spacing:1.5px;color:var(--accent);margin-bottom:5px}
+.lg-bar{width:150px;height:8px;border-radius:4px;
+  background:linear-gradient(90deg,#9ef0ff,#3fa9ff 18%,#2fe06b 38%,#f8f32b 55%,#ff9c33 72%,#ff4040 88%,#ff5ce1)}
+.lg-lab{display:flex;justify-content:space-between;margin-top:3px;width:150px;font-size:9px;color:var(--dim)}
+
+#locateBtn{position:absolute;top:12px;left:10px;z-index:1100;width:38px;height:38px;border-radius:10px;
+  border:1px solid var(--accent);background:var(--glass);color:var(--accent);font-size:18px;cursor:pointer}
+#locateBtn:hover{background:rgba(var(--accent-rgb),.15)}
+
+/* pengganti peta dasar */
+#baseSeg{position:absolute;top:60px;left:10px;z-index:1100;display:flex;flex-direction:column;gap:6px}
+#baseSeg button{width:auto;padding:6px 12px;border-radius:9px;border:1px solid var(--accent);
+  background:var(--glass);color:var(--accent);font:700 11px 'Rajdhani';letter-spacing:1.5px;cursor:pointer}
+#baseSeg button.active{background:var(--accent);color:var(--accent-contrast);box-shadow:0 0 12px rgba(var(--accent-rgb),.4)}
+
+/* ===== MINI-MAP OVERVIEW ===== */
+#miniBtn{position:absolute;left:10px;bottom:12px;z-index:1101;width:38px;height:38px;border-radius:10px;
+  border:1px solid var(--accent);background:var(--glass);color:var(--accent);font-size:16px;cursor:pointer}
+#miniWrap{position:absolute;left:10px;bottom:12px;z-index:1100;width:210px;height:155px;
+  border:1px solid var(--accent);border-radius:12px;overflow:hidden;
+  box-shadow:0 8px 26px rgba(0,0,0,.5);background:var(--mapbg)}
+#miniMap{position:absolute;inset:0}
+#miniLabel{position:absolute;top:0;left:0;right:0;z-index:1300;display:flex;justify-content:space-between;
+  align-items:center;font:700 9px 'Orbitron';letter-spacing:2px;color:var(--accent);
+  background:var(--glass);padding:3px 4px 3px 9px}
+#miniClose{border:0;background:transparent;color:var(--dim);cursor:pointer;font-size:12px;padding:2px 6px}
+#miniClose:hover{color:var(--red)}
+#miniHint{position:absolute;bottom:0;left:0;right:0;z-index:1300;font:10px 'Rajdhani';
+  color:var(--dim);background:var(--glass);padding:2px 9px;letter-spacing:.5px}
+
+.rv-sat{mix-blend-mode:screen}
+
+/* marker custom */
+.me{width:18px;height:18px;position:relative}
+.me i{position:absolute;inset:3px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.me::before{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--green);
+  animation:pulse 1.6s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.7);opacity:0}}
+.cond{width:26px;height:26px;border-radius:50%;background:var(--panel);display:grid;place-items:center;
+  font:700 12px 'Rajdhani';border:2px solid}
+.ep{width:28px;height:28px;border-radius:50%;background:var(--panel);display:grid;place-items:center;
+  font:800 13px 'Rajdhani';border:2px solid}
+
+/* leaflet overrides */
+.leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;font-family:'Rajdhani'}
+.leaflet-popup-tip{background:var(--panel);border:1px solid var(--line)}
+.leaflet-control-attribution{background:var(--glass)!important;color:var(--dim)!important;font-size:10px}
+.leaflet-control-attribution a{color:var(--accent)!important}
+.leaflet-control-scale-line{background:var(--glass)!important;color:var(--dim)!important;
+  border-color:var(--line)!important}
+.leaflet-bar a{background:var(--panel)!important;color:var(--accent)!important;border-color:var(--line)!important}
+
+/* toasts */
+#toasts{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:3000;
+  display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:92vw}
+.toast{background:var(--glass);border:1px solid var(--line);border-left:4px solid var(--accent);
+  color:var(--text);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;
+  box-shadow:0 6px 20px rgba(0,0,0,.4);animation:tin .25s ease-out;max-width:92vw}
+.toast.ok{border-left-color:var(--green)}
+.toast.warn{border-left-color:var(--yellow)}
+.toast.err{border-left-color:var(--red)}
+.toast.out{opacity:0;transform:translateY(-8px);transition:.3s}
+@keyframes tin{from{opacity:0;transform:translateY(-10px)}}
+
+/* ===== MOBILE ===== */
+@media (max-width:880px){
+  #btnMenu{display:grid;place-items:center}
+  .iconbtn{display:grid}
+  .sub{display:none}
+  #clock{display:none}
+  #sidebar{position:absolute;top:0;bottom:0;left:0;z-index:1250;width:min(92vw,380px);
+    transform:translateX(-105%);transition:transform .28s ease;box-shadow:14px 0 44px rgba(0,0,0,.5)}
+  #sidebar.open{transform:none}
+  #miniWrap{width:158px;height:118px;bottom:118px}
+  #miniBtn{bottom:118px;left:auto;right:10px}
+  #baseSeg{flex-direction:row}
+}
+@media (max-width:560px){
+  #radarUpdated{display:none}
+  #legend{display:none}
+  #opSlider{width:64px}
+  .brand h1{font-size:13px;letter-spacing:1px}
+  .brand h1 span{display:none}
+  #wxTemp{font-size:34px}
+  #btnTheme span{display:none}
+  #btnTheme{padding:6px 9px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="btnMenu" title="Buka panel">☰</button>
+    <div class="radar-logo"><i></i></div>
+    <div class="brand">
+      <h1>SKYRADAR<span>PERJALANAN</span></h1>
+      <p class="sub">Peta cuaca real-time • Android / PC / Laptop</p>
+    </div>
+    <div class="hstats">
+      <div class="live"><i></i>LIVE</div>
+      <div class="hstat" id="radarUpdated">RADAR …</div>
+      <div class="hstat mono" id="clock">--:--:--</div>
+      <button id="btnTheme" title="Ganti tema tampilan">🌙 <span>GELAP</span></button>
+    </div>
+  </header>
+
+  <div id="main">
+    <!-- ============ SIDEBAR ============ -->
+    <aside id="sidebar">
+      <div class="sb-head">
+        <h2>PANEL MISI</h2>
+        <button id="btnClose" class="iconbtn" title="Tutup">✕</button>
+      </div>
+
+      <!-- CUACA LOKASI -->
+      <section class="sec">
+        <h3>📍 CUACA LOKASI</h3>
+        <div class="searchwrap">
+          <input id="inpCari" class="txt" type="text" placeholder="Cari kota / alamat… (mis. Jakarta)" autocomplete="off"/>
+          <div id="lsCari" class="srlist"></div>
+        </div>
+        <div class="rowbtns">
+          <button id="btnGps" class="btn">⌖ LOKASI SAYA (GPS)</button>
+        </div>
+        <div id="wxEmpty" class="hint">
+          Klik titik mana pun di peta, cari lokasi, atau tekan <b>LOKASI SAYA</b> untuk melihat kondisi cuaca <b>nyata</b> di koordinat tersebut.
+        </div>
+        <div id="wxCard" class="card hidden">
+          <div class="wx-head">
+            <span id="wxIcon">❓</span>
+            <div>
+              <div id="wxName">—</div>
+              <div id="wxCoords">—</div>
+            </div>
+            <span id="wxAlert" class="badge green">—</span>
+          </div>
+          <div class="wx-main">
+            <span id="wxTemp">—</span>
+            <span id="wxDesc">—</span>
+          </div>
+          <div class="wx-grid">
+            <div><label>ANGIN</label><b id="wxWind">—</b></div>
+            <div><label>HEMBUSAN</label><b id="wxGust">—</b></div>
+            <div><label>KELEMBAPAN</label><b id="wxHum">—</b></div>
+            <div><label>PRESIPITASI</label><b id="wxPrec">—</b></div>
+            <div><label>TERASA</label><b id="wxFeel">—</b></div>
+            <div><label>AWAN</label><b id="wxCloud">—</b></div>
+          </div>
+          <div class="wx-hourly" id="wxHourly"></div>
+          <button id="wxRefresh" class="btn ghost full">⟳ PERBARUI DATA CUACA</button>
+        </div>
+      </section>
+
+      <!-- RUTE -->
+      <section class="sec">
+        <h3>🚗 ANALISIS RUTE PERJALANAN</h3>
+        <label class="lbl">TITIK ASAL</label>
+        <div class="searchwrap">
+          <input id="inpAsal" class="txt" type="text" placeholder="Ketik kota asal…" autocomplete="off"/>
+          <div id="lsAsal" class="srlist"></div>
+        </div>
+        <label class="lbl">TITIK TUJUAN</label>
+        <div class="searchwrap">
+          <input id="inpTujuan" class="txt" type="text" placeholder="Ketik kota tujuan…" autocomplete="off"/>
+          <div id="lsTujuan" class="srlist"></div>
+        </div>
+        <div class="rowbtns">
+          <button id="btnGpsAsal" class="btn ghost">⌖ GPS→Asal</button>
+          <button id="btnSwap" class="btn ghost">⇅ Tukar</button>
+        </div>
+        <button id="btnRoute" class="btn full">🔍 ANALISIS CUACA RUTE</button>
+        <div id="routeResult" class="hidden" style="margin-top:10px">
+          <div id="routeMeta"></div>
+          <div id="routeVerdict"></div>
+          <div id="routeList"></div>
+        </div>
+      </section>
+
+      <!-- CARA PAKAI -->
+      <section class="sec">
+        <details class="howto">
+          <summary>📖 Cara pakai</summary>
+          <ul>
+            <li>🎨 Tombol <b>🌙/☀️/🌃</b> di pojok kanan atas: ganti tema <b>GELAP</b>, <b>TERANG</b>, atau <b>MALAM</b> (mode pasar gelap berkendara — hitam + amber, nyaman di mata malam hari). Pilihan tersimpan otomatis.</li>
+            <li>🗺️ Tombol <b>PETA / SATELIT / GELAP</b> di kiri atas: ganti peta dasar (semua tanpa API key).</li>
+            <li>🔎 <b>Cari kota</b> → peta melompat & panel cuaca menampilkan kondisi nyata.</li>
+            <li>👆 <b>Klik peta</b> di titik mana pun → cuaca koordinat itu.</li>
+            <li>🎞️ <b>Bar radar bawah</b>: animasi hujan nyata (±2 jam lalu + prediksi 30 mnt, berlabel PREDIKSI).</li>
+            <li>🚗 <b>Isi asal & tujuan</b> → ANALISIS: rute jalan nyata + cuaca di 7 titik perjalanan.</li>
+            <li>🗺️ <b>Mini-map kiri bawah</b>: gambaran seluruh rute + kotak posisi layar. Klik mini-map untuk melompat.</li>
+            <li>🟩 aman · 🟨 waspada · 🟥 bahaya.</li>
+          </ul>
+        </details>
+      </section>
+
+      <footer class="src">
+        Sumber data <b>nyata & tanpa API key</b>: RainViewer (radar presipitasi global) · Open-Meteo (model cuaca) ·
+        OpenStreetMap / Esri / CARTO (peta dasar) · OSRM (rute jalan). Butuh koneksi internet. Bukan simulasi.
+      </footer>
+    </aside>
+
+    <!-- ============ PETA ============ -->
+    <div id="mapWrap">
+      <div id="map"></div>
+
+      <div id="legend">
+        <div class="lg-title">INTENSITAS HUJAN</div>
+        <div class="lg-bar"></div>
+        <div class="lg-lab"><span>Ringan</span><span>Sedang</span><span>Badai</span></div>
+      </div>
+
+      <button id="locateBtn" title="Menuju lokasi saya (GPS)">⌖</button>
+
+      <div id="baseSeg" title="Ganti peta dasar">
+        <button data-b="osm" class="active">🗺 PETA</button>
+        <button data-b="sat">🛰 SATELIT</button>
+        <button data-b="dark">🌙 GELAP</button>
+      </div>
+
+      <div id="miniWrap">
+        <div id="miniLabel"><span>OVERVIEW</span><button id="miniClose" title="Sembunyikan">✕</button></div>
+        <div id="miniMap"></div>
+        <div id="miniHint">klik mini-map untuk melompat</div>
+      </div>
+      <button id="miniBtn" class="hidden" title="Tampilkan overview">🗺</button>
+
+      <div id="radarBar">
+        <div class="rb-row">
+          <button id="btnPlay" class="rbtn" title="Putar animasi radar">▶</button>
+          <button id="btnNow" class="rbtn" title="Frame terbaru">⏭</button>
+          <div class="rb-time mono">
+            <span id="timeLabel">--:--</span><span id="predLabel">PREDIKSI</span>
+          </div>
+          <div class="seg" id="kindSeg">
+            <button data-kind="radar" class="active">HUJAN</button>
+            <button data-kind="satellite">AWAN</button>
+            <button data-kind="off">OFF</button>
+          </div>
+          <div class="opwrap"><span>◐</span><input id="opSlider" type="range" min="30" max="100" value="70" title="Opasitas overlay"/></div>
+        </div>
+        <input id="tlSlider" type="range" min="0" max="0" value="0" disabled title="Garis waktu radar"/>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ================= UTIL ================= */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtTime=ts=>{const d=new Date(ts*1000);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+const fmtDist=m=>m>=1000?(m/1000).toLocaleString('id-ID',{maximumFractionDigits:0})+' km':Math.round(m)+' m';
+const fmtDur=s=>{const h=Math.floor(s/3600),m=Math.round(s%3600/60);return (h?h+' j ':'')+m+' m';};
+function haversine(a,b){const R=6371000,r=d=>d*Math.PI/180;
+  const s=Math.sin(r(b.lat-a.lat)/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(r(b.lon-a.lon)/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));}
+function compass(d){return ['U','TL','T','TG','S','BD','B','BL'][Math.round(d/45)%8];}
+function toast(msg,type='info'){const t=document.createElement('div');t.className='toast '+type;
+  t.textContent=msg;$('toasts').appendChild(t);
+  setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),350);},4200);}
+
+/* WMO -> deskripsi Indonesia */
+function wmo(code,isDay=1){
+  const m={0:'Cerah|☀️',1:'Cerah Berawan|🌤️',2:'Berawan Sebagian|⛅',3:'Berawan|☁️',
+    45:'Berkabut|🌫️',48:'Kabut Beku|🌫️',
+    51:'Gerimis Ringan|🌦️',53:'Gerimis|🌦️',55:'Gerimis Lebat|🌧️',
+    56:'Gerimis Beku|🌧️',57:'Gerimis Beku Lebat|🌧️',
+    61:'Hujan Ringan|🌦️',63:'Hujan Sedang|🌧️',65:'Hujan Lebat|🌧️',
+    66:'Hujan Beku|🌧️',67:'Hujan Beku Lebat|🌧️',
+    71:'Salju Ringan|🌨️',73:'Salju|🌨️',75:'Salju Lebat|❄️',77:'Butiran Salju|🌨️',
+    80:'Hujan Lokal Ringan|🌦️',81:'Hujan Lokal|🌧️',82:'Hujan Lokal Hebat|⛈️',
+    85:'Hujan Salju|🌨️',86:'Hujan Salju Lebat|❄️',
+    95:'Badai Petir|⛈️',96:'Badai Petir + Es|⛈️',99:'Badai Petir + Es Hebat|⛈️'};
+  let[desc,icon]=(m[code]||'—|❓').split('|');
+  if(!isDay&&code<=1)icon='🌙';
+  return{desc,icon};
+}
+function alertLevel(c){
+  const code=c.weather_code,p=c.precipitation??0,w=c.wind_speed_10m??0,g=c.wind_gusts_10m??0;
+  if(code>=95||p>=7.6||w>=50||g>=80)return{lvl:'danger',text:'⛔ BAHAYA',cls:'red'};
+  if(code>=51||[45,48].includes(code)||p>=0.5||w>=25||g>=45)return{lvl:'warn',text:'⚠️ WASPADA',cls:'yellow'};
+  return{lvl:'ok',text:'✅ AMAN',cls:'green'};
+}
+const alertColor=l=>l==='danger'?'#ff5c5c':l==='warn'?'#ffd166':'#27ff81';
+
+/* ================= TEMA (GELAP / TERANG / MALAM) ================= */
+const THEMES={
+  dark:{icon:'🌙',label:'GELAP',base:'dark',color:'#04121e'},
+  light:{icon:'☀️',label:'TERANG',base:'osm',color:'#e8f3fa'},
+  night:{icon:'🌃',label:'MALAM',base:'dark',color:'#0c0505'}
+};
+const THEME_ORDER=['dark','light','night'];
+function getSavedTheme(){
+  try{const t=localStorage.getItem('skyradar-theme');return THEMES[t]?t:'dark';}catch(e){return 'dark';}
+}
+function applyTheme(t,silent=false){
+  if(!THEMES[t])t='dark';
+  document.documentElement.dataset.theme=t;
+  try{localStorage.setItem('skyradar-theme',t);}catch(e){}
+  $('metaTheme').content=THEMES[t].color;
+  $('btnTheme').innerHTML=`${THEMES[t].icon} <span>${THEMES[t].label}</span>`;
+  // peta dasar menyesuaikan tema (bisa diubah manual kapan pun setelahnya)
+  if(typeof setBase==='function'&&state.map)setBase(THEMES[t].base);
+  if(!silent)toast(`Tema: ${THEMES[t].icon} ${THEMES[t].label}`);
+}
+
+/* ================= STATE ================= */
+const state={
+  map:null, radarData:null, radarHost:'https://tilecache.rainviewer.com',
+  radarKind:'radar', radarOn:true, radarFrames:[], radarPastCount:0,
+  radarIndex:0, radarOpacity:.7, playing:false, timer:null, autoplayed:false,
+  wxMarker:null, wxLast:null, meMarker:null, meCircle:null,
+  routeG:null, journey:{origin:null,dest:null}
+};
+const RV_JSON='https://api.rainviewer.com/public/weather-maps.json';
+
+/* ================= PETA DASAR (semua TANPA API KEY) ================= */
+const BASEMAPS={
+  osm:{url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+       attr:'© OpenStreetMap contributors', retina:true},
+  sat:{url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+       attr:'Esri, Maxar, Earthstar Geographics',
+       labels:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'},
+  dark:{url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+       sub:'abcd', attr:'© OpenStreetMap © CARTO'}
+};
+let baseLayer=null, baseLabels=null;
+
+function setBase(key){
+  const map=state.map;if(!map)return;
+  if(baseLayer){map.removeLayer(baseLayer);baseLayer=null;}
+  if(baseLabels){map.removeLayer(baseLabels);baseLabels=null;}
+  const b=BASEMAPS[key]||BASEMAPS.osm;
+  baseLayer=L.tileLayer(b.url,{
+    subdomains:b.sub||'abc', maxZoom:19, detectRetina:!!b.retina, attribution:b.attr
+  }).addTo(map);
+  if(b.labels) baseLabels=L.tileLayer(b.labels,{maxZoom:19,pane:'labelPane'}).addTo(map);
+  document.querySelectorAll('#baseSeg button').forEach(x=>x.classList.toggle('active',x.dataset.b===key));
+}
+
+/* ================= PETA ================= */
+function initMap(){
+  const map=L.map('map',{center:[-2.5,118],zoom:5,minZoom:3,maxZoom:19,
+    worldCopyJump:true,zoomControl:true,attributionControl:true});
+  map.attributionControl.setPrefix('Leaflet');
+  map.createPane('radarPane').style.zIndex=350;
+  map.createPane('routePane').style.zIndex=420;
+  map.createPane('labelPane').style.zIndex=450;
+
+  setBase('osm');
+  L.control.scale({imperial:false}).addTo(map);
+
+  map.on('click',e=>showWeatherAt(e.latlng.lat,e.latlng.lng));
+  state.map=map;
+}
+
+/* ================= MINI-MAP OVERVIEW ================= */
+let mini=null, miniRect=null, routeBounds=null;
+function initMini(){
+  mini=L.map('miniMap',{zoomControl:false,attributionControl:false,
+    dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,
+    keyboard:false,touchZoom:false,inertia:false,zoomSnap:0.25});
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(mini);
+  miniRect=L.rectangle(state.map.getBounds(),{color:'#19e6ff',weight:1.5,dashArray:'4 3',
+    fillColor:'#19e6ff',fillOpacity:.1,interactive:false}).addTo(mini);
+  mini.on('click',e=>state.map.setView(e.latlng,state.map.getZoom()));
+  syncMini();
+  window.addEventListener('resize',()=>mini.invalidateSize());
+}
+function syncMini(){
+  if(!mini)return;
+  if(routeBounds){
+    mini.fitBounds(routeBounds,{padding:[10,10]});
+  }else{
+    mini.setView(state.map.getCenter(),Math.max(2,state.map.getZoom()-4),{animate:false});
+  }
+  miniRect.setBounds(state.map.getBounds());
+}
+function showMini(show){
+  $('miniWrap').classList.toggle('hidden',!show);
+  $('miniBtn').classList.toggle('hidden',show);
+  if(show){mini.invalidateSize();syncMini();}
+}
+
+/* ================= RADAR (RainViewer — data nyata) ================= */
+async function initRadarData(){
+  if(state.radarData)return;
+  try{
+    const r=await fetch(RV_JSON,{cache:'no-store'});
+    state.radarData=await r.json();
+    state.radarHost=state.radarData.host||state.radarHost;
+  }catch(e){toast('Gagal memuat data radar','err');}
+}
+function makeFrameLayer(f){
+  const k=state.radarKind;
+  const url=`${state.radarHost}${f.path}/256/{z}/{x}/{y}/${k==='radar'?4:0}/${k==='radar'?'1_1':'0_0'}.png`;
+  return L.tileLayer(url,{pane:'radarPane',opacity:0,crossOrigin:true,maxNativeZoom:12,maxZoom:19,
+    className:k==='radar'?'rv-radar':'rv-sat',
+    attribution:k==='radar'?'RainViewer':'RainViewer IR'});
+}
+function clearFrameLayers(){state.radarFrames.forEach(f=>{if(f.layer)state.map.removeLayer(f.layer);});}
+function buildFrames(){
+  clearFrameLayers();
+  const d=state.radarData;
+  const list=state.radarKind==='radar'
+    ?[...((d.radar&&d.radar.past)||[]),...((d.radar&&d.radar.nowcast)||[])]
+    :(d.satellite&&d.satellite.infrared||[]).slice(-13);
+  state.radarPastCount=(d.radar&&d.radar.past)?d.radar.past.length:0;
+  state.radarFrames=list.map(x=>({time:x.time,path:x.path,layer:null}));
+  const sl=$('tlSlider');sl.max=Math.max(0,list.length-1);sl.disabled=list.length===0;
+  showFrame(list.length-1);
+  updateRadarStatus();
+  if(!state.autoplayed&&list.length){state.autoplayed=true;startPlay();}
+}
+function showFrame(i){
+  const fr=state.radarFrames;if(!fr.length)return;
+  state.radarIndex=((i%fr.length)+fr.length)%fr.length;
+  const idx=state.radarIndex,map=state.map;
+  fr.forEach((f,j)=>{
+    const near=Math.abs(j-idx)<=1;
+    if(f.layer&&!near&&map.hasLayer(f.layer))map.removeLayer(f.layer);
+    if(near&&!f.layer)f.layer=makeFrameLayer(f);
+    if(near&&!map.hasLayer(f.layer))f.layer.addTo(map);
+    if(f.layer)f.layer.setOpacity(j===idx?state.radarOpacity:0);
+  });
+  $('tlSlider').value=idx;
+  const f=fr[idx];
+  $('timeLabel').textContent=fmtTime(f.time);
+  const isFc=state.radarKind==='radar'&&idx>=state.radarPastCount;
+  $('predLabel').style.display=isFc?'':'none';
+}
+function updateRadarStatus(){
+  const d=state.radarData;if(!d)return;
+  const arr=state.radarKind==='radar'?(d.radar&&d.radar.past):(d.satellite&&d.satellite.infrared);
+  const t=(arr&&arr.length)?arr[arr.length-1].time:null;
+  $('radarUpdated').textContent=state.radarOn?('DATA '+fmtTime(t??0)):'OVERLAY OFF';
+}
+async function refreshRadar(){
+  await initRadarData();
+  if(state.radarData){if(state.radarOn)buildFrames();updateRadarStatus();}
+}
+function startPlay(){
+  if(!state.radarOn||!state.radarFrames.length)return;
+  state.playing=true;$('btnPlay').textContent='⏸';$('btnPlay').classList.add('on');tick();
+}
+function stopPlay(){
+  state.playing=false;clearTimeout(state.timer);
+  $('btnPlay').textContent='▶';$('btnPlay').classList.remove('on');
+}
+function tick(){
+  if(!state.playing)return;
+  const n=state.radarFrames.length;if(!n)return;
+  let nx=state.radarIndex+1;if(nx>=n)nx=0;
+  showFrame(nx);
+  const hold=nx===0?500:(nx===n-1?1300:520);
+  state.timer=setTimeout(tick,hold);
+}
+
+/* ================= CUACA (Open-Meteo — data nyata) ================= */
+async function fetchWeather(lat,lon){
+  const u='https://api.open-meteo.com/v1/forecast'
+    +`?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`
+    +'&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,'
+    +'weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m'
+    +'&hourly=temperature_2m,precipitation_probability,precipitation,weather_code'
+    +'&forecast_hours=12&timezone=auto';
+  const r=await fetch(u);if(!r.ok)throw new Error('gagal');
+  return r.json();
+}
+async function reverseName(lat,lon){
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=id&lat=${lat}&lon=${lon}`);
+    const d=await r.json();
+    return (d.display_name||'').split(',').slice(0,2).join(', ')||null;
+  }catch(e){return null;}
+}
+function setWxMarker(lat,lon,lvl,title,desc,temp){
+  const map=state.map;
+  if(state.wxMarker)map.removeLayer(state.wxMarker);
+  state.wxMarker=L.circleMarker([lat,lon],{radius:9,color:'#eaffff',weight:2,
+    fillColor:alertColor(lvl),fillOpacity:.85}).addTo(map)
+    .bindPopup(`<b>${esc(title)}</b><br>${desc} • ${temp}`);
+}
+async function showWeatherAt(lat,lon,name=null,accM=null){
+  state.wxLast={lat,lon,name};
+  $('wxEmpty').classList.add('hidden');
+  $('wxCard').classList.remove('hidden');
+  $('wxTemp').textContent='…';
+  try{
+    const d=await fetchWeather(lat,lon);
+    let nm=name;if(!nm)nm=await reverseName(lat,lon)||`${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+    const coords=accM!=null?`${lat.toFixed(4)}, ${lon.toFixed(4)} • ±${Math.round(accM)} m`
+                           :`${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    renderWeather(d,nm,coords);
+    const al=alertLevel(d.current),w=wmo(d.current.weather_code,d.current.is_day);
+    setWxMarker(lat,lon,al.lvl,nm,`${w.icon} ${w.desc}`,Math.round(d.current.temperature_2m)+'°C');
+  }catch(e){
+    toast('Gagal memuat data cuaca','err');
+    $('wxCard').classList.add('hidden');$('wxEmpty').classList.remove('hidden');
+  }
+}
+function renderWeather(d,name,coords){
+  const c=d.current,w=wmo(c.weather_code,c.is_day),al=alertLevel(c);
+  $('wxIcon').textContent=w.icon;
+  $('wxName').textContent=name;
+  $('wxCoords').textContent=coords;
+  const b=$('wxAlert');b.textContent=al.text;b.className='badge '+al.cls;
+  $('wxTemp').textContent=Math.round(c.temperature_2m)+'°';
+  $('wxDesc').textContent=w.desc;
+  $('wxWind').textContent=Math.round(c.wind_speed_10m)+' km/j '+compass(c.wind_direction_10m);
+  $('wxGust').textContent=Math.round(c.wind_gusts_10m||0)+' km/j';
+  $('wxHum').textContent=Math.round(c.relative_humidity_2m)+'%';
+  $('wxPrec').textContent=(c.precipitation??0).toFixed(1)+' mm';
+  $('wxFeel').textContent=Math.round(c.apparent_temperature)+'°';
+  $('wxCloud').textContent=Math.round(c.cloud_cover??0)+'%';
+  const H=d.hourly;let html='';
+  for(let i=0;i<Math.min(12,(H&&H.time)?H.time.length:0);i++){
+    const hh=H.time[i].slice(11,16);
+    const wc=wmo(H.weather_code[i]);
+    const pp=(H.precipitation_probability&&H.precipitation_probability[i])??0;
+    html+=`<div class="hr"><span class="t">${hh}</span><span class="ic">${wc.icon}</span>`+
+          `<span class="v">${Math.round(H.temperature_2m[i])}°</span>`+
+          `<div class="pbar"><i style="height:${Math.max(pp,3)}%"></i></div><span class="p">${pp}%</span></div>`;
+  }
+  $('wxHourly').innerHTML=html;
+}
+
+/* ================= PENCARIAN (Nominatim — nyata) ================= */
+function attachSearch(input,list,onPick,onInvalidate,label='Lokasi'){
+  let tmr=null;
+  input.addEventListener('input',()=>{
+    if(onInvalidate)onInvalidate();
+    clearTimeout(tmr);
+    const q=input.value.trim();
+    if(q.length<3){list.innerHTML='';list.classList.remove('show');return;}
+    tmr=setTimeout(async()=>{
+      try{
+        const r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=id&q='+encodeURIComponent(q));
+        const res=await r.json();
+        list.innerHTML='';
+        if(!res.length){list.innerHTML='<div class="sr-item dim">Tidak ditemukan</div>';list.classList.add('show');return;}
+        res.forEach(rm=>{
+          const parts=rm.display_name.split(',');
+          const div=document.createElement('div');div.className='sr-item';
+          div.innerHTML=`<b>${esc(parts[0])}</b><span>${esc(parts.slice(1,3).join(','))}</span>`;
+          div.onclick=()=>{
+            list.classList.remove('show');
+            input.value=parts[0]+(parts[1]?', '+parts[1].trim():'');
+            input.title=rm.display_name;
+            const pick={lat:+rm.lat,lon:+rm.lon,name:parts[0],full:rm.display_name};
+            toast('✅ '+label+': '+parts[0],'ok');
+            onPick(pick);
+          };
+          list.appendChild(div);
+        });
+        list.classList.add('show');
+      }catch(e){/* diam */}
+    },550);
+  });
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();
+      const f=list.querySelector('.sr-item');if(f&&!f.classList.contains('dim'))f.click();}
+  });
+  document.addEventListener('click',e=>{
+    if(!list.contains(e.target)&&e.target!==input)list.classList.remove('show');
+  });
+}
+
+/* ================= RUTE (OSRM — jalan nyata) ================= */
+async function osrmRoute(a,b){
+  const u=`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
+  const r=await fetch(u);const d=await r.json();
+  if(d.code!=='Ok')throw new Error('rute gagal');
+  return d.routes[0];
+}
+function interp(a,b,n=64){const o=[];for(let i=0;i<n;i++)
+  o.push([a.lat+(b.lat-a.lat)*i/(n-1),a.lon+(b.lon-a.lon)*i/(n-1)]);return o;}
+function clearRoute(){
+  if(state.routeG){state.map.removeLayer(state.routeG);state.routeG=null;}
+  routeBounds=null;
+  if(mini)syncMini();
+  $('routeResult').classList.add('hidden');
+}
+function addEndpoint(p,letter,color){
+  L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',
+    html:`<div class="ep" style="border-color:${color};color:${color}">${letter}</div>`,
+    iconSize:[28,28],iconAnchor:[14,14]})})
+  .addTo(state.routeG)
+  .bindPopup(`<b>${letter==='A'?'ASAL':'TUJUAN'}:</b> ${esc(p.name||'')}`);
+}
+async function analyzeRoute(){
+  const a=state.journey.origin,b=state.journey.dest;
+  if(!a||!b){toast('Pilih titik ASAL dan TUJUAN dari hasil pencarian dulu','warn');return;}
+  const btn=$('btnRoute');btn.disabled=true;btn.textContent='⏳ MENGANALISIS RUTE…';
+  clearRoute();state.routeG=L.layerGroup().addTo(state.map);
+  try{
+    let line,meta,src;
+    try{
+      const r=await osrmRoute(a,b);
+      line=r.geometry.coordinates.map(c=>[c[1],c[0]]);
+      meta={dist:r.distance,dur:r.duration};src='Rute jalan nyata via OSRM';
+    }catch(e){
+      line=interp(a,b,64);
+      const d=haversine(a,b)*1.25;
+      meta={dist:d,dur:d/(75*1000/3600)};src='Perkiraan garis lurus (server rute tak terjangkau)';
+      toast('Rute jalan tidak tersedia — pakai garis lurus','warn');
+    }
+    L.polyline(line,{pane:'routePane',color:'#19e6ff',weight:11,opacity:.22}).addTo(state.routeG);
+    L.polyline(line,{pane:'routePane',color:'#19e6ff',weight:3.5,opacity:.95,dashArray:'9 7'}).addTo(state.routeG);
+    addEndpoint(a,'A','#27ff81');addEndpoint(b,'B','#19e6ff');
+
+    const acc=[0];
+    for(let i=1;i<line.length;i++)
+      acc.push(acc[i-1]+haversine({lat:line[i-1][0],lon:line[i-1][1]},{lat:line[i][0],lon:line[i][1]}));
+    const N=7,pts=[],kms=[];
+    for(let i=0;i<N;i++){
+      const idx=Math.round(i*(line.length-1)/(N-1));
+      pts.push(line[idx]);kms.push(acc[idx]/1000);
+    }
+    const wx=await Promise.all(pts.map(p=>fetchWeather(p[0],p[1]).catch(()=>null)));
+    const rows=[];let bad=0,warn=0;
+    wx.forEach((d,i)=>{
+      const lab=i===0?'Asal':(i===N-1?'Tujuan':'Titik '+(i+1));
+      if(!d){rows.push({cls:'',km:kms[i],lab,icon:'❓',desc:'Data tak tersedia',temp:''});return;}
+      const al=alertLevel(d.current),w=wmo(d.current.weather_code,d.current.is_day);
+      if(al.lvl==='danger')bad++;else if(al.lvl==='warn')warn++;
+      const col=alertColor(al.lvl);
+      L.marker(pts[i],{icon:L.divIcon({className:'',
+        html:`<div class="cond" style="border-color:${col};color:${col}">${i+1}</div>`,
+        iconSize:[26,26],iconAnchor:[13,13]})})
+      .addTo(state.routeG)
+      .bindPopup(`<b>${lab} • km ${Math.round(kms[i])}</b><br>${w.icon} ${w.desc} • ${Math.round(d.current.temperature_2m)}°C`+
+        `<br>💨 ${Math.round(d.current.wind_speed_10m)} km/j • 💧 ${(d.current.precipitation??0).toFixed(1)} mm`);
+      rows.push({cls:al.cls,km:kms[i],lab,icon:w.icon,desc:w.desc,temp:Math.round(d.current.temperature_2m)+'°'});
+    });
+    $('routeMeta').innerHTML=`📦 <b>${fmtDist(meta.dist)}</b> • ⏱️ ±<b>${fmtDur(meta.dur)}</b><br><span class="dimtxt">${src}</span>`;
+    const v=$('routeVerdict');
+    if(bad>0){v.className='verdict v-red';
+      v.innerHTML=`⛈️ CUACA BURUK terdeteksi di ${bad} dari ${N} titik rute.<br>Pertimbangkan menunda keberangkatan atau ubah rute.`;}
+    else if(warn>0){v.className='verdict v-yellow';
+      v.innerHTML=`⚠️ Hujan ringan/sedang di ${warn} dari ${N} titik.<br>Siapkan jas hujan & berkendara hati-hati.`;}
+    else{v.className='verdict v-green';
+      v.innerHTML='✅ Kondisi aman di sepanjang rute. Selamat jalan!';}
+    $('routeList').innerHTML=rows.map(r=>
+      `<div class="rw"><span class="km">km ${String(Math.round(r.km)).padStart(3,'0')}</span>`+
+      `<span class="nm">${esc(r.lab)}</span><span class="st ${r.cls}">${r.icon} ${esc(r.desc)} ${r.temp}</span></div>`).join('');
+    $('routeResult').classList.remove('hidden');
+    state.map.fitBounds(line,{padding:[46,46]});
+    routeBounds=L.latLngBounds(line);
+    if(mini){mini.invalidateSize();syncMini();}
+    closeSidebarMobile();
+  }finally{btn.disabled=false;btn.textContent='🔍 ANALISIS CUACA RUTE';}
+}
+
+/* ================= GPS ================= */
+function locateMe(){
+  if(!('geolocation' in navigator)){toast('Perangkat tidak mendukung GPS','err');return;}
+  toast('📡 Mengunci posisi GPS…');
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const {latitude:lat,longitude:lon,accuracy}=pos.coords,map=state.map;
+    if(state.meMarker){map.removeLayer(state.meMarker);state.meMarker=null;}
+    if(state.meCircle){map.removeLayer(state.meCircle);state.meCircle=null;}
+    state.meCircle=L.circle([lat,lon],{radius:accuracy||800,color:'#27ff81',weight:1,
+      fillOpacity:.06,pane:'routePane'}).addTo(map);
+    state.meMarker=L.marker([lat,lon],{icon:L.divIcon({className:'',
+      html:'<div class="me"><i></i></div>',iconSize:[18,18],iconAnchor:[9,9]})}).addTo(map);
+    map.flyTo([lat,lon],Math.max(11,map.getZoom()),{duration:1.1});
+    await showWeatherAt(lat,lon,'Posisi Saya (GPS)',accuracy);
+    toast('✅ Posisi terkunci — cuaca diperbarui','ok');
+    closeSidebarMobile();
+  },err=>toast('GPS gagal/ditolak: '+(err.message||'izin lokasi'),'err'),
+  {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+}
+function closeSidebarMobile(){if(window.innerWidth<=880)$('sidebar').classList.remove('open');}
+
+/* ================= JAM ================= */
+function startClock(){const el=$('clock');
+  const f=()=>el.textContent=new Date().toLocaleTimeString('en-GB',{hour12:false});
+  f();setInterval(f,1000);}
+
+/* ================= BOOT ================= */
+window.addEventListener('load',()=>{
+  applyTheme(getSavedTheme(),true);   // terapkan tema tersimpan (tanpa toast)
+  initMap();
+  initMini();
+
+  // sinkronkan mini-map dengan peta utama
+  state.map.on('move zoomend',()=>{
+    if(!mini)return;
+    if(!routeBounds)mini.setView(state.map.getCenter(),Math.max(2,state.map.getZoom()-4),{animate:false});
+    miniRect.setBounds(state.map.getBounds());
+  });
+
+  // ganti peta dasar (manual)
+  document.querySelectorAll('#baseSeg button').forEach(b=>{
+    b.onclick=()=>setBase(b.dataset.b);
+  });
+
+  // siklus tema: GELAP → TERANG → MALAM → GELAP
+  $('btnTheme').onclick=()=>{
+    const cur=document.documentElement.dataset.theme||'dark';
+    const next=THEME_ORDER[(THEME_ORDER.indexOf(cur)+1)%THEME_ORDER.length];
+    applyTheme(next);
+  };
+
+  // radar UI
+  $('btnPlay').onclick=()=>state.playing?stopPlay():startPlay();
+  $('btnNow').onclick=()=>{stopPlay();showFrame(state.radarFrames.length-1);};
+  $('tlSlider').addEventListener('input',e=>{stopPlay();showFrame(+e.target.value);});
+  $('opSlider').addEventListener('input',e=>{
+    state.radarOpacity=e.target.value/100;
+    const f=state.radarFrames[state.radarIndex];
+    if(f&&f.layer)f.layer.setOpacity(state.radarOpacity);
+  });
+  document.querySelectorAll('#kindSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#kindSeg button').forEach(x=>x.classList.toggle('active',x===b));
+    const k=b.dataset.kind;
+    if(k==='off'){
+      state.radarOn=false;stopPlay();clearFrameLayers();
+      $('tlSlider').disabled=true;$('timeLabel').textContent='—';
+      $('predLabel').style.display='none';updateRadarStatus();
+    }else{
+      state.radarOn=true;state.radarKind=k;$('tlSlider').disabled=false;
+      initRadarData().then(()=>{if(state.radarData)buildFrames();});
+    }
+  });
+  setInterval(refreshRadar,5*60*1000);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlay();});
+
+  // pencarian
+  attachSearch($('inpCari'),$('lsCari'),p=>{
+    state.map.flyTo([p.lat,p.lon],10,{duration:1.1});
+    showWeatherAt(p.lat,p.lon,p.name);closeSidebarMobile();
+  },null,'Lokasi');
+  attachSearch($('inpAsal'),$('lsAsal'),p=>{state.journey.origin=p;},
+    ()=>{state.journey.origin=null;},'Asal');
+  attachSearch($('inpTujuan'),$('lsTujuan'),p=>{state.journey.dest=p;},
+    ()=>{state.journey.dest=null;},'Tujuan');
+
+  // tombol
+  $('btnGps').onclick=locateMe;
+  $('locateBtn').onclick=locateMe;
+  $('wxRefresh').onclick=()=>{const w=state.wxLast;
+    if(w)showWeatherAt(w.lat,w.lon,w.name);else toast('Belum ada titik cuaca dipilih','warn');};
+  $('btnRoute').onclick=analyzeRoute;
+  $('btnSwap').onclick=()=>{
+    const o=state.journey.origin;state.journey.origin=state.journey.dest;state.journey.dest=o;
+    const t=$('inpAsal').value;$('inpAsal').value=$('inpTujuan').value;$('inpTujuan').value=t;
+  };
+  $('btnGpsAsal').onclick=()=>{
+    if(!('geolocation' in navigator)){toast('GPS tidak didukung','err');return;}
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const {latitude:lat,longitude:lon}=pos.coords;
+      state.journey.origin={lat,lon,name:'Posisi GPS'};
+      $('inpAsal').value='Posisi GPS';toast('✅ Asal = posisi GPS Anda','ok');
+    },()=>toast('GPS gagal/ditolak','err'),{enableHighAccuracy:true,timeout:12000});
+  };
+  $('btnMenu').onclick=()=>$('sidebar').classList.add('open');
+  $('btnClose').onclick=closeSidebarMobile;
+  $('miniClose').onclick=()=>showMini(false);
+  $('miniBtn').onclick=()=>showMini(true);
+
+  // cegah peta menyerap klik/scroll kontrol overlay
+  ['radarBar','legend','locateBtn','baseSeg','miniWrap','miniBtn'].forEach(id=>{
+    const el=$(id);if(el)L.DomEvent.disableClickPropagation(el).disableScrollPropagation(el);
+  });
+
+  startClock();
+  refreshRadar();
+  locateMe();
+});
+</script>
+</body>
+</html>
